@@ -1,0 +1,101 @@
+# ============================================================
+#  Spring AI Template - Production Profile
+#  Use environment variables for all sensitive config
+#  Default: OpenAI. Set OLLAMA_ENABLED=true to use Ollama.
+# ============================================================
+
+spring:
+
+  # ---- PostgreSQL ----
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://postgres:5432/spring_ai}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 30
+      minimum-idle: 10
+      idle-timeout: 60000
+      connection-timeout: 10000
+
+  # ---- Redis ----
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: 0
+      lettuce:
+        pool:
+          max-active: 20
+          max-idle: 10
+          min-idle: 5
+
+  # ---- RabbitMQ ----
+  rabbitmq:
+    host: ${RABBITMQ_HOST:rabbitmq}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:admin}
+    password: ${RABBITMQ_PASSWORD:}
+    virtual-host: /
+    listener:
+      simple:
+        acknowledge-mode: manual
+        prefetch: 5
+
+  # ---- Spring AI ----
+  ai:
+
+    # -- Ollama: disabled by default in prod, set OLLAMA_ENABLED=true to enable --
+    ollama:
+      enabled: ${OLLAMA_ENABLED:false}
+      base-url: ${OLLAMA_BASE_URL:http://ollama:11434}
+      chat:
+        model: ${OLLAMA_CHAT_MODEL:qwen2.5:7b}
+        options:
+          temperature: 0.7
+          num-predict: 4096
+      embedding:
+        model: ${OLLAMA_EMBEDDING_MODEL:nomic-embed-text}
+
+    # -- OpenAI: default provider --
+    openai:
+      api-key: ${OPENAI_API_KEY:}
+      base-url: ${OPENAI_BASE_URL:https://api.openai.com}
+      chat:
+        enabled: ${OPENAI_CHAT_ENABLED:true}
+        model: ${OPENAI_CHAT_MODEL:gpt-4o-mini}
+      embedding:
+        enabled: ${OPENAI_EMBEDDING_ENABLED:true}
+        model: ${OPENAI_EMBEDDING_MODEL:text-embedding-3-small}
+        dimensions: 1536
+
+    vectorstore:
+      pgvector:
+        index-type: HNSW
+        distance-type: COSINE_DISTANCE
+        dimensions: 1536
+        table-name: vector_store
+        initialize-schema: false
+
+    chat:
+      memory:
+        repository:
+          type: redis
+
+# ---- Actuator (prod: restricted) ----
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: when-authorized
+
+# ---- Logging (prod: less verbose) ----
+logging:
+  level:
+    root: WARN
+    com.template: INFO
+    org.springframework.ai: WARN

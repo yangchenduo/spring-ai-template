@@ -1,0 +1,106 @@
+# ============================================================
+#  Spring AI Template - Development Profile (OpenAI by default)
+#  Use -Dspring.profiles.active=dev,ollama to enable Ollama
+# ============================================================
+
+spring:
+
+  # ---- PostgreSQL ----
+  datasource:
+    url: jdbc:postgresql://localhost:5432/spring_ai
+    username: postgres
+    password: postgres
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+      idle-timeout: 30000
+
+  # ---- Redis ----
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password: redis123
+      database: 0
+      lettuce:
+        pool:
+          max-active: 10
+          max-idle: 5
+          min-idle: 1
+
+  # ---- RabbitMQ ----
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: admin
+    password: admin123
+    virtual-host: /
+    listener:
+      simple:
+        acknowledge-mode: manual
+        prefetch: 1
+
+  # ---- Spring AI Configuration ----
+  ai:
+
+    # -- Ollama: disabled by default, activate with profile "ollama" --
+    ollama:
+      enabled: false
+      base-url: http://localhost:11434
+      chat:
+        model: qwen2.5:7b
+        options:
+          temperature: 0.7
+          num-predict: 2048
+      embedding:
+        model: nomic-embed-text
+
+    # -- OpenAI / compatible provider (default) --
+    openai:
+      api-key: ${OPENAI_API_KEY:}
+      base-url: ${OPENAI_BASE_URL:https://api.openai.com}
+      chat:
+        enabled: true
+        model: mimo-v2.5-pro
+        options:
+          temperature: 0.7
+      # Embedding: disabled by default.
+      # Enable only if your provider supports embedding API (OpenAI, DeepSeek, etc.)
+      # MiMo currently does not provide embedding API, keep this disabled.
+      embedding:
+        enabled: ${OPENAI_EMBEDDING_ENABLED:false}
+        model: ${OPENAI_EMBEDDING_MODEL:text-embedding-3-small}
+        dimensions: 1536
+
+    # -- Vector Store (PGVector) --
+    vectorstore:
+      pgvector:
+        index-type: HNSW
+        distance-type: COSINE_DISTANCE
+        dimensions: 1536
+        table-name: vector_store
+        initialize-schema: true
+
+    # -- Chat Memory (Redis) --
+    chat:
+      memory:
+        repository:
+          type: redis
+
+# ---- Actuator ----
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+# ---- Logging (dev: more verbose) ----
+logging:
+  level:
+    com.template: DEBUG
+    org.springframework.ai: DEBUG
+    org.springframework.amqp: DEBUG
