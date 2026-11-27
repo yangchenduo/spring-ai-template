@@ -1,6 +1,6 @@
 # ============================================================
-#  Spring AI Template - Development Profile (OpenAI by default)
-#  Use -Dspring.profiles.active=dev,ollama to enable Ollama
+#  Spring AI Template - Development Profile
+#  Chat and embedding each talk to an OpenAI-compatible endpoint (see .env)
 # ============================================================
 
 spring:
@@ -38,31 +38,34 @@ spring:
     virtual-host: /
     listener:
       simple:
-        acknowledge-mode: manual
+        # auto: ack on success, reject to DLQ on failure (default-requeue-rejected=false)
+        acknowledge-mode: auto
+        default-requeue-rejected: false
         prefetch: 1
 
   # ---- Spring AI Configuration ----
   ai:
-    # Model selectors (Spring AI 2.x): the embedding selector picks the
-    # EmbeddingModel that backs the vector store ("openai" here; the
-    # "ollama" profile switches it to "ollama"). The chat selector is left
-    # unset, so both chat models coexist and AiConfig binds the primary
-    # ChatClient to the OpenAI-compatible endpoint via @Qualifier.
+    # Embedding has exactly one path: the OpenAI-compatible endpoint below
+    # (spring.ai.openai.embedding.*). Cloud by default; to keep embeddings
+    # on-prem point EMBEDDING_BASE_URL at a local /v1 server (Ollama, vLLM,
+    # LocalAI, ...) - no profile switch and no code change. The chat
+    # selector is left unset so AiConfig keeps binding the primary ChatClient
+    # to openAiChatModel via @Qualifier.
     model:
       embedding: openai
 
-    # -- Ollama: local LLM, activate with profile "ollama" --
+    # -- Ollama: optional local chat server, kept for experiments only --
+    # The primary ChatClient is bound to openAiChatModel; to chat through
+    # Ollama, point OPENAI_BASE_URL at http://localhost:11434/v1 instead.
     ollama:
-      base-url: http://localhost:11434
+      base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
       chat:
-        model: qwen2.5:7b
+        model: ${OLLAMA_CHAT_MODEL:qwen2.5:7b}
         options:
           temperature: 0.7
           num-predict: 2048
-      embedding:
-        model: nomic-embed-text
 
-    # -- OpenAI / compatible provider (default) --
+    # -- Chat: any OpenAI-compatible endpoint --
     # Credentials are injected from the environment (root .env, IDE run
     # configuration or shell). Never commit an api-key here.
     openai:
@@ -72,19 +75,23 @@ spring:
         options:
           model: ${OPENAI_CHAT_MODEL:gpt-4o-mini}
           temperature: 0.7
-      # Embedding for RAG. Requires the provider behind OPENAI_BASE_URL to
-      # support the OpenAI /embeddings API; switch spring.ai.model.embedding
-      # to "ollama" if it does not.
+      # -- Embedding: independent OpenAI-compatible endpoint with its own
+      #    credentials. Defaults to SiliconFlow's free BAAI/bge-m3
+      #    (1024 dims, 8K-token input).
+      #    NOTE: do NOT set 'dimensions' here - bge models reject that
+      #    parameter; on SiliconFlow only the Qwen/Qwen3-Embedding series
+      #    supports it. The pgvector table width comes from EMBEDDING_DIMENSIONS.
       embedding:
-        model: ${OPENAI_EMBEDDING_MODEL:text-embedding-3-small}
-        dimensions: 1536
+        base-url: ${EMBEDDING_BASE_URL:https://api.siliconflow.cn/v1}
+        api-key: ${EMBEDDING_API_KEY:}
+        model: ${EMBEDDING_MODEL:BAAI/bge-m3}
 
-    # -- Vector Store (PGVector) --
+    # -- Vector Store (PGVector): dimensions MUST match the embedding model --
     vectorstore:
       pgvector:
         index-type: HNSW
         distance-type: COSINE_DISTANCE
-        dimensions: 1536
+        dimensions: ${EMBEDDING_DIMENSIONS:1024}
         table-name: vector_store
         initialize-schema: true
 

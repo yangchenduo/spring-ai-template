@@ -57,6 +57,19 @@ springdoc:
   api-docs:
     path: /v3/api-docs
 
+# ---- Document Storage (raw files behind the ingestion pipeline) ----
+# type=local keeps files on the filesystem below app.storage.local.root;
+# implement the DocumentStorage interface and switch the type to use MinIO/S3.
+app:
+  ai:
+    # Provider label stored in chat_history / returned by /api/chat. The actual
+    # endpoint is whatever OPENAI_BASE_URL points at (cloud or on-prem /v1).
+    chat-provider: ${CHAT_PROVIDER:openai}
+  storage:
+    type: ${STORAGE_TYPE:local}
+    local:
+      root: ${STORAGE_ROOT:./data/documents}
+
 # ---- Logging ----
 logging:
   level:

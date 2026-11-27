@@ -27,15 +27,26 @@ services:
       RABBITMQ_PORT: 5672
       RABBITMQ_USER: ${RABBITMQ_USER:-admin}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-admin123}
-      OLLAMA_BASE_URL: http://ollama:11434
-      OLLAMA_CHAT_MODEL: ${OLLAMA_CHAT_MODEL:-qwen2.5:7b}
-      OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}
+      # -- Chat: OpenAI-compatible endpoint --
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com}
       OPENAI_CHAT_MODEL: ${OPENAI_CHAT_MODEL:-gpt-4o-mini}
-      OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
-      # Embedding provider backing the vector store: openai (default) or ollama
-      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-openai}
+      # -- Embedding: independent OpenAI-compatible endpoint (cloud default).
+      #    For on-prem embedding point EMBEDDING_BASE_URL at a local /v1
+      #    server (Ollama, vLLM, LocalAI) - no code or image change. --
+      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-https://api.siliconflow.cn/v1}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-BAAI/bge-m3}
+      EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS:-1024}
+      # -- Raw uploaded files must live on a volume, not the container layer --
+      STORAGE_TYPE: ${STORAGE_TYPE:-local}
+      STORAGE_ROOT: /app/data/documents
+      # -- Optional local chat server (--profile ollama); unused unless
+      #    OPENAI_BASE_URL points at it --
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      OLLAMA_CHAT_MODEL: ${OLLAMA_CHAT_MODEL:-qwen2.5:7b}
+    volumes:
+      - app_documents:/app/data/documents
     depends_on:
       postgres:
         condition: service_healthy
@@ -43,9 +54,13 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-      ollama:
-        condition: service_started
+      # ollama is intentionally not a dependency: it only exists behind the
+      # "ollama" profile and is optional for on-prem chat/embeddings.
     networks:
       - ai-network
     profiles:
       - app
+
+volumes:
+  # Raw uploaded documents - survives container recreation
+  app_documents:

@@ -54,6 +54,9 @@ docker/.env
 logs/
 *.log
 
+### Local document storage (raw uploaded files) ###
+data/
+
 ### Local History ###
 .history/
 

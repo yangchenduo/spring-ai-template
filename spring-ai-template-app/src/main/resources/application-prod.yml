@@ -1,7 +1,8 @@
 # ============================================================
 #  Spring AI Template - Production Profile
 #  Use environment variables for all sensitive config
-#  Default: OpenAI. Set EMBEDDING_PROVIDER=ollama to use local Ollama embeddings.
+#  Default: OpenAI-compatible cloud endpoints. To keep embeddings on-prem,
+#  point EMBEDDING_BASE_URL at a local /v1 server (Ollama, vLLM, LocalAI).
 # ============================================================
 
 spring:
@@ -40,16 +41,20 @@ spring:
     virtual-host: /
     listener:
       simple:
-        acknowledge-mode: manual
+        # auto: ack on success, reject to DLQ on failure (default-requeue-rejected=false)
+        acknowledge-mode: auto
+        default-requeue-rejected: false
         prefetch: 5
 
   # ---- Spring AI ----
   ai:
-    # Embedding selector for the vector store: "openai" (default) or "ollama".
+    # Embedding: single path through the OpenAI-compatible endpoint below.
     model:
-      embedding: ${EMBEDDING_PROVIDER:openai}
+      embedding: openai
 
-    # -- Ollama: local LLM --
+    # -- Ollama: optional local chat server, experiments only --
+    # The primary ChatClient stays on openAiChatModel; to chat through an
+    # on-prem server, point OPENAI_BASE_URL at its /v1 endpoint instead.
     ollama:
       base-url: ${OLLAMA_BASE_URL:http://ollama:11434}
       chat:
@@ -57,25 +62,27 @@ spring:
         options:
           temperature: 0.7
           num-predict: 4096
-      embedding:
-        model: ${OLLAMA_EMBEDDING_MODEL:nomic-embed-text}
 
-    # -- OpenAI: default provider --
+    # -- Chat: any OpenAI-compatible endpoint (env-switchable, no default key) --
     openai:
       api-key: ${OPENAI_API_KEY:}
       base-url: ${OPENAI_BASE_URL:https://api.openai.com}
       chat:
         options:
           model: ${OPENAI_CHAT_MODEL:gpt-4o-mini}
+      # -- Embedding: independent OpenAI-compatible endpoint, defaults to
+      #    SiliconFlow's BAAI/bge-m3. Do NOT set 'dimensions' for bge models
+      #    (only the Qwen/Qwen3-Embedding series supports it on SiliconFlow).
       embedding:
-        model: ${OPENAI_EMBEDDING_MODEL:text-embedding-3-small}
-        dimensions: 1536
+        base-url: ${EMBEDDING_BASE_URL:https://api.siliconflow.cn/v1}
+        api-key: ${EMBEDDING_API_KEY:}
+        model: ${EMBEDDING_MODEL:BAAI/bge-m3}
 
     vectorstore:
       pgvector:
         index-type: HNSW
         distance-type: COSINE_DISTANCE
-        dimensions: 1536
+        dimensions: ${EMBEDDING_DIMENSIONS:1024}
         table-name: vector_store
         initialize-schema: false
 
