@@ -151,7 +151,13 @@ public class KnowledgeServiceImpl implements KnowledgeService {
             // List<Document> documents = reader.get();
 
             // Split into chunks
-            TokenTextSplitter splitter = new TokenTextSplitter(800, 200, 10, 10000, true);
+            TokenTextSplitter splitter = TokenTextSplitter.builder()
+                    .withChunkSize(800)
+                    .withMinChunkSizeChars(200)
+                    .withMinChunkLengthToEmbed(10)
+                    .withMaxNumChunks(10000)
+                    .withKeepSeparator(true)
+                    .build();
             // List<Document> chunks = splitter.apply(documents);
 
             // Add metadata

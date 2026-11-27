@@ -1,14 +1,18 @@
 # ============================================================
 #  Spring AI Template - Ollama Profile
 #  Activate: -Dspring.profiles.active=dev,ollama
-#  This profile enables Ollama as the AI provider.
+#  This profile switches the vector-store embedding source to Ollama.
 # ============================================================
 
 spring:
   ai:
+    # Switch the vector-store embedding source to Ollama (768-dim
+    # nomic-embed-text). Both chat models stay available; the primary
+    # ChatClient still targets the OpenAI-compatible endpoint.
+    model:
+      embedding: ollama
 
     ollama:
-      enabled: true
       base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
       chat:
         model: ${OLLAMA_CHAT_MODEL:qwen2.5:7b}
@@ -17,9 +21,6 @@ spring:
           num-predict: 4096
       embedding:
         model: ${OLLAMA_EMBEDDING_MODEL:nomic-embed-text}
-
-    openai:
-      enabled: false
 
     vectorstore:
       pgvector:

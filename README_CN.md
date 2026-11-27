@@ -9,23 +9,23 @@
 - **多模型 AI 对话** - OpenAI（默认）+ Ollama（可选本地部署），支持同步/流式响应
 - **RAG 检索增强生成** - 基于 PGVector 的文档问答
 - **知识库管理** - 文档上传、解析、向量化、管理
-- **对话记忆** - Redis 持久化会话历史
+- **对话记忆** - 按会话维护上下文窗口，历史消息落库 PostgreSQL
 - **异步文档处理** - RabbitMQ 驱动的文档入库流水线
-- **API 文档** - Knife4j / OpenAPI 3 自动生成接口文档
+- **API 文档** - SpringDoc / Swagger UI（OpenAPI 3）
 
 ## 技术栈
 
 | 层级 | 技术 |
 |------|------|
-| 应用框架 | Spring Boot 3.4.5, Spring AI 1.0.0 |
-| 运行环境 | Java 21 |
+| 应用框架 | Spring Boot 4.2.0, Spring AI 2.1.0 |
+| 运行环境 | Java 21（`JAVA_HOME` 需指向 JDK 21） |
 | 大语言模型 | OpenAI / 兼容接口（默认）, Ollama（可选） |
 | 向量数据库 | PostgreSQL + pgvector |
-| 缓存 / 记忆 | Redis 7 |
+| 缓存 / 会话 | Redis 7 |
 | 消息队列 | RabbitMQ 3.13 |
-| ORM 框架 | MyBatis-Plus 3.5.9 |
+| ORM 框架 | MyBatis-Plus 3.5.18.1 |
 | 对象存储 | MinIO |
-| 接口文档 | Knife4j (OpenAPI 3) |
+| 接口文档 | SpringDoc 3.2.1 / Swagger UI |
 | 容器化 | Docker Compose |
 
 ## 项目结构
@@ -71,13 +71,13 @@ spring-ai-template/
 
 ### 环境要求
 
-- Java 21+
+- Java 21+（Maven 从 `JAVA_HOME` 取 JDK；若系统 PATH 里还有旧版 JDK 8，必须把 `JAVA_HOME` 指到 JDK 21）
 - Docker & Docker Compose
 - OpenAI API Key（或兼容接口的 Key：DeepSeek、通义千问、智谱 AI、Moonshot 等）
 
 ### 第一步：配置 API Key
 
-项目根目录有 `.env` 文件，用于本地开发时加载环境变量。编辑它填入你的 API Key：
+项目根目录有 `.env` 文件，用于本地开发时加载环境变量。应用通过 `spring.config.import` 自动导入它，无需再手动 export（真实环境变量优先级更高）。编辑它填入你的 API Key：
 
 ```bash
 # 编辑项目根目录的 .env（不是 docker/.env）
@@ -118,7 +118,7 @@ docker compose -f docker/docker-compose.yml ps
 | 服务 | 端口 | 说明 |
 |------|------|------|
 | PostgreSQL + pgvector | 5432 | 向量数据库 + 业务数据库 |
-| Redis 7 | 6379 | 缓存 + 对话记忆 |
+| Redis 7 | 6379 | 缓存 + Sa-Token 会话存储 |
 | RabbitMQ 3.13 | 5672 / 15672 | 消息队列 + 管理控制台 |
 | MinIO | 9000 / 9001 | 对象存储（文档管理） |
 
@@ -155,14 +155,14 @@ $env:OPENAI_CHAT_MODEL = "gpt-4o-mini"
 | 服务 | 地址 | 说明 |
 |------|------|------|
 | API 基础路径 | http://localhost:8080/api | REST API |
-| Knife4j | http://localhost:8080/doc.html | 增强版 API 文档 |
 | Swagger UI | http://localhost:8080/swagger-ui.html | 交互式 API 文档 |
+| OpenAPI JSON | http://localhost:8080/v3/api-docs | OpenAPI 3 描述文件 |
 | RabbitMQ 控制台 | http://localhost:15672 | 用户名: admin / 密码: admin123 |
 | MinIO 控制台 | http://localhost:9001 | 用户名: minioadmin / 密码: minioadmin |
 
-## 可选：使用 Ollama 本地模型
+## 可选：使用 Ollama 本地向量模型
 
-如果你希望在本地运行模型，不调用云端 API：
+`ollama` profile 会把**向量库的 Embedding 来源**切换到本地 Ollama（768 维 `nomic-embed-text`）。对话仍走 OpenAI 兼容接口：`AiConfig` 通过 `@Qualifier` 把主 `ChatClient` 绑定到 `openAiChatModel`，而该 profile 设置的 `spring.ai.model.embedding=ollama` 会关闭 OpenAI 的 Embedding Bean，避免出现两个 `EmbeddingModel`。
 
 ```bash
 # 1. 启动 Ollama 服务
@@ -180,6 +180,9 @@ set -a && source .env && set +a && \
 ./mvnw spring-boot:run -pl spring-ai-template-app \
   -Dspring-boot.run.profiles=dev,ollama
 ```
+
+> 切换 Embedding 提供方会改变向量维度（OpenAI 1536 维 vs Ollama 768 维）。切换时请使用干净的
+> `vector_store` 表（或按 provider 分表），否则写入会因维度不匹配而失败。
 
 ## API 接口
 
@@ -246,6 +249,7 @@ curl http://localhost:8080/api/knowledge/{id}/documents
 | `OPENAI_BASE_URL` | api.openai.com | OpenAI 兼容接口地址 |
 | `OPENAI_CHAT_MODEL` | gpt-4o-mini | 对话模型名称 |
 | `OPENAI_EMBEDDING_MODEL` | text-embedding-3-small | 向量嵌入模型名称 |
+| `EMBEDDING_PROVIDER` | openai | 向量库 Embedding 来源：`openai` 或 `ollama`（prod） |
 | `POSTGRES_PASSWORD` | postgres | PostgreSQL 密码 |
 | `REDIS_PASSWORD` | redis123 | Redis 密码 |
 | `RABBITMQ_USER` | admin | RabbitMQ 用户名 |
@@ -259,7 +263,7 @@ curl http://localhost:8080/api/knowledge/{id}/documents
 |---------|------|
 | `dev` | 开发环境（默认），使用 OpenAI |
 | `prod` | 生产环境，所有配置通过环境变量注入 |
-| `ollama` | 启用 Ollama 本地模型，需与 `dev` 或 `prod` 一起使用 |
+| `ollama` | 向量库 Embedding 切换到 Ollama 本地模型，需与 `dev` 或 `prod` 一起使用 |
 
 ```bash
 # 使用 OpenAI（默认）

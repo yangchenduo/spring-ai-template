@@ -9,23 +9,23 @@ A production-ready Spring Boot + Spring AI template project with Docker-managed 
 - **Multi-provider AI Chat** - OpenAI (default) + Ollama (optional local), with streaming support
 - **RAG (Retrieval-Augmented Generation)** - Document-based QA with PGVector
 - **Knowledge Base Management** - Upload, parse, and vectorize documents
-- **Chat Memory** - Redis-backed conversation history
+- **Chat Memory** - Per-conversation context window, persisted to PostgreSQL
 - **Async Document Processing** - RabbitMQ-driven document ingestion pipeline
-- **API Documentation** - Knife4j / OpenAPI 3 auto-generated docs
+- **API Documentation** - SpringDoc / Swagger UI (OpenAPI 3)
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
-| Framework | Spring Boot 3.4.5, Spring AI 1.0.0 |
-| Runtime | Java 21 |
+| Framework | Spring Boot 4.2.0, Spring AI 2.1.0 |
+| Runtime | Java 21 (`JAVA_HOME` must point to a JDK 21 install) |
 | LLM | OpenAI / compatible (default), Ollama (optional) |
 | Vector Store | PostgreSQL + pgvector |
-| Cache / Memory | Redis 7 |
+| Cache / Session | Redis 7 |
 | Message Queue | RabbitMQ 3.13 |
-| ORM | MyBatis-Plus 3.5.9 |
+| ORM | MyBatis-Plus 3.5.18.1 |
 | Object Storage | MinIO |
-| API Docs | Knife4j (OpenAPI 3) |
+| API Docs | SpringDoc 3.2.1 / Swagger UI |
 | Container | Docker Compose |
 
 ## Project Structure
@@ -68,13 +68,13 @@ spring-ai-template/
 
 ### Prerequisites
 
-- Java 21+
+- Java 21+ (Maven takes the JDK from `JAVA_HOME`, so point it at the JDK 21 install even if an older JDK is on `PATH`)
 - Docker & Docker Compose
 - An OpenAI API key (or compatible provider: DeepSeek, Qwen, ZhipuAI, Moonshot, etc.)
 
 ### Step 1: Configure API Key
 
-Edit the `.env` file in the project root (not `docker/.env`, which is for Docker containers):
+Edit the `.env` file in the project root (not `docker/.env`, which is for Docker containers). The application imports it automatically through `spring.config.import`, so no shell export is needed (real environment variables still take precedence):
 
 ```env
 OPENAI_API_KEY=sk-your-key-here
@@ -108,7 +108,7 @@ docker compose -f docker/docker-compose.yml ps
 | Service | Port | Description |
 |---------|------|-------------|
 | PostgreSQL + pgvector | 5432 | Vector store + business DB |
-| Redis | 6379 | Cache + chat memory |
+| Redis | 6379 | Cache + Sa-Token session store |
 | RabbitMQ | 5672 / 15672 | Message queue + management UI |
 | MinIO | 9000 / 9001 | Object storage |
 
@@ -143,14 +143,17 @@ $env:OPENAI_CHAT_MODEL = "gpt-4o-mini"
 ### Step 4: Access
 
 - **API Base**: http://localhost:8080/api
-- **Knife4j**: http://localhost:8080/doc.html
 - **Swagger UI**: http://localhost:8080/swagger-ui.html
+- **OpenAPI JSON**: http://localhost:8080/v3/api-docs
 - **RabbitMQ Console**: http://localhost:15672 (admin/admin123)
 - **MinIO Console**: http://localhost:9001 (minioadmin/minioadmin)
 
-## Optional: Use Ollama (Local LLM)
+## Optional: Ollama for Local Embeddings
 
-If you prefer running models locally instead of calling cloud APIs:
+The `ollama` profile switches the **vector-store embedding source** to a local Ollama model
+(768-dim `nomic-embed-text`). Chat keeps using the OpenAI-compatible endpoint: `AiConfig` binds
+the primary `ChatClient` to `openAiChatModel`, while `spring.ai.model.embedding=ollama`
+(set by the profile) disables the OpenAI embedding bean so only one `EmbeddingModel` exists.
 
 ```bash
 # 1. Start Ollama service
@@ -168,6 +171,10 @@ set -a && source .env && set +a && \
 ./mvnw spring-boot:run -pl spring-ai-template-app \
   -Dspring-boot.run.profiles=dev,ollama
 ```
+
+> Switching embedding providers changes the vector dimension (1536 for OpenAI vs 768 for Ollama).
+> Use a clean `vector_store` table (or one table per provider) when switching, otherwise inserts
+> will fail with a dimension mismatch.
 
 ## API Endpoints
 
@@ -226,6 +233,7 @@ curl http://localhost:8080/api/knowledge/{id}/documents
 | `OPENAI_BASE_URL` | api.openai.com | OpenAI-compatible base URL |
 | `OPENAI_CHAT_MODEL` | gpt-4o-mini | Chat model name |
 | `OPENAI_EMBEDDING_MODEL` | text-embedding-3-small | Embedding model name |
+| `EMBEDDING_PROVIDER` | openai | Embedding source for the vector store: `openai` or `ollama` (prod) |
 | `POSTGRES_PASSWORD` | postgres | PostgreSQL password |
 | `REDIS_PASSWORD` | redis123 | Redis password |
 | `RABBITMQ_USER` | admin | RabbitMQ username |

@@ -1,7 +1,7 @@
 # ============================================================
 #  Spring AI Template - Production Profile
 #  Use environment variables for all sensitive config
-#  Default: OpenAI. Set OLLAMA_ENABLED=true to use Ollama.
+#  Default: OpenAI. Set EMBEDDING_PROVIDER=ollama to use local Ollama embeddings.
 # ============================================================
 
 spring:
@@ -45,10 +45,12 @@ spring:
 
   # ---- Spring AI ----
   ai:
+    # Embedding selector for the vector store: "openai" (default) or "ollama".
+    model:
+      embedding: ${EMBEDDING_PROVIDER:openai}
 
-    # -- Ollama: disabled by default in prod, set OLLAMA_ENABLED=true to enable --
+    # -- Ollama: local LLM --
     ollama:
-      enabled: ${OLLAMA_ENABLED:false}
       base-url: ${OLLAMA_BASE_URL:http://ollama:11434}
       chat:
         model: ${OLLAMA_CHAT_MODEL:qwen2.5:7b}
@@ -63,10 +65,9 @@ spring:
       api-key: ${OPENAI_API_KEY:}
       base-url: ${OPENAI_BASE_URL:https://api.openai.com}
       chat:
-        enabled: ${OPENAI_CHAT_ENABLED:true}
-        model: ${OPENAI_CHAT_MODEL:gpt-4o-mini}
+        options:
+          model: ${OPENAI_CHAT_MODEL:gpt-4o-mini}
       embedding:
-        enabled: ${OPENAI_EMBEDDING_ENABLED:true}
         model: ${OPENAI_EMBEDDING_MODEL:text-embedding-3-small}
         dimensions: 1536
 
@@ -77,11 +78,6 @@ spring:
         dimensions: 1536
         table-name: vector_store
         initialize-schema: false
-
-    chat:
-      memory:
-        repository:
-          type: redis
 
 # ---- Actuator (prod: restricted) ----
 management:

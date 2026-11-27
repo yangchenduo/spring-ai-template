@@ -43,10 +43,16 @@ spring:
 
   # ---- Spring AI Configuration ----
   ai:
+    # Model selectors (Spring AI 2.x): the embedding selector picks the
+    # EmbeddingModel that backs the vector store ("openai" here; the
+    # "ollama" profile switches it to "ollama"). The chat selector is left
+    # unset, so both chat models coexist and AiConfig binds the primary
+    # ChatClient to the OpenAI-compatible endpoint via @Qualifier.
+    model:
+      embedding: openai
 
-    # -- Ollama: disabled by default, activate with profile "ollama" --
+    # -- Ollama: local LLM, activate with profile "ollama" --
     ollama:
-      enabled: false
       base-url: http://localhost:11434
       chat:
         model: qwen2.5:7b
@@ -57,19 +63,19 @@ spring:
         model: nomic-embed-text
 
     # -- OpenAI / compatible provider (default) --
+    # Credentials are injected from the environment (root .env, IDE run
+    # configuration or shell). Never commit an api-key here.
     openai:
       api-key: ${OPENAI_API_KEY:}
       base-url: ${OPENAI_BASE_URL:https://api.openai.com}
       chat:
-        enabled: true
-        model: mimo-v2.5-pro
         options:
+          model: ${OPENAI_CHAT_MODEL:gpt-4o-mini}
           temperature: 0.7
-      # Embedding: disabled by default.
-      # Enable only if your provider supports embedding API (OpenAI, DeepSeek, etc.)
-      # MiMo currently does not provide embedding API, keep this disabled.
+      # Embedding for RAG. Requires the provider behind OPENAI_BASE_URL to
+      # support the OpenAI /embeddings API; switch spring.ai.model.embedding
+      # to "ollama" if it does not.
       embedding:
-        enabled: ${OPENAI_EMBEDDING_ENABLED:false}
         model: ${OPENAI_EMBEDDING_MODEL:text-embedding-3-small}
         dimensions: 1536
 
@@ -81,12 +87,6 @@ spring:
         dimensions: 1536
         table-name: vector_store
         initialize-schema: true
-
-    # -- Chat Memory (Redis) --
-    chat:
-      memory:
-        repository:
-          type: redis
 
 # ---- Actuator ----
 management:

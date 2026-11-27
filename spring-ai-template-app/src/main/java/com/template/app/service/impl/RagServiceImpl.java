@@ -5,7 +5,7 @@ import com.template.common.dto.ChatResponse;
 import com.template.common.dto.RagRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.chat.client.advisor.QuestionAnswerAdvisor;
+import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvisor;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.stereotype.Service;
@@ -51,7 +51,7 @@ public class RagServiceImpl implements RagService {
         String response = chatClient.prompt()
                 .system(systemPrompt)
                 .user(request.getQuestion())
-                .advisors(new QuestionAnswerAdvisor(vectorStore, searchRequest))
+                .advisors(QuestionAnswerAdvisor.builder(vectorStore).searchRequest(searchRequest).build())
                 .call()
                 .content();
 
@@ -82,7 +82,7 @@ public class RagServiceImpl implements RagService {
         return chatClient.prompt()
                 .system(systemPrompt)
                 .user(request.getQuestion())
-                .advisors(new QuestionAnswerAdvisor(vectorStore, searchRequest))
+                .advisors(QuestionAnswerAdvisor.builder(vectorStore).searchRequest(searchRequest).build())
                 .stream()
                 .content();
     }
