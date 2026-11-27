@@ -41,7 +41,7 @@ http://localhost:8080/api
 {
   "message": "What is Spring AI?",
   "conversationId": null,
-  "provider": "ollama",
+  "provider": "openai",
   "model": null,
   "temperature": 0.7
 }
@@ -55,8 +55,8 @@ http://localhost:8080/api
   "data": {
     "conversationId": "conv_abc123",
     "message": "Spring AI is...",
-    "provider": "ollama",
-    "model": "qwen2.5:7b",
+    "provider": "openai",
+    "model": "gpt-4o-mini",
     "elapsed": 1234
   }
 }
@@ -69,6 +69,6 @@ http://localhost:8080/api
   "knowledgeIds": ["default"],
   "topK": 5,
   "similarityThreshold": 0.7,
-  "provider": "ollama"
+  "provider": "openai"
 }
 ```

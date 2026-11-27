@@ -87,9 +87,14 @@ spring-ai-template/
 `.env` 文件内容示例：
 
 ```env
-OPENAI_API_KEY=sk-your-key-here
+OPENAI_API_KEY=sk-your-key-here          # 对话端点
 OPENAI_BASE_URL=https://api.openai.com
 OPENAI_CHAT_MODEL=gpt-4o-mini
+
+EMBEDDING_BASE_URL=https://api.siliconflow.cn/v1   # 嵌入端点
+EMBEDDING_API_KEY=sk-your-key-here
+EMBEDDING_MODEL=BAAI/bge-m3
+EMBEDDING_DIMENSIONS=1024
 ```
 
 支持的 OpenAI 兼容接口（只需修改 `OPENAI_BASE_URL` 和 `OPENAI_CHAT_MODEL`）：
@@ -160,29 +165,35 @@ $env:OPENAI_CHAT_MODEL = "gpt-4o-mini"
 | RabbitMQ 控制台 | http://localhost:15672 | 用户名: admin / 密码: admin123 |
 | MinIO 控制台 | http://localhost:9001 | 用户名: minioadmin / 密码: minioadmin |
 
-## 可选：使用 Ollama 本地向量模型
+## 可选：把对话 / 嵌入切到本地
 
-`ollama` profile 会把**向量库的 Embedding 来源**切换到本地 Ollama（768 维 `nomic-embed-text`）。对话仍走 OpenAI 兼容接口：`AiConfig` 通过 `@Qualifier` 把主 `ChatClient` 绑定到 `openAiChatModel`，而该 profile 设置的 `spring.ai.model.embedding=ollama` 会关闭 OpenAI 的 Embedding Bean，避免出现两个 `EmbeddingModel`。
+对话和嵌入是两个相互独立的 OpenAI 兼容客户端，本地化只需改地址——不需要 profile、不改代码、不重建镜像：
+
+| 部分 | 需要改的变量 |
+|------|--------------|
+| 对话 | `OPENAI_BASE_URL`（+ `OPENAI_CHAT_MODEL`） |
+| 嵌入 | `EMBEDDING_BASE_URL`（+ `EMBEDDING_MODEL`、`EMBEDDING_DIMENSIONS`） |
 
 ```bash
-# 1. 启动 Ollama 服务
+# 1. 启动可选的本地 Ollama 容器
 docker compose -f docker/docker-compose.yml --profile ollama up -d
 
-# 2. 拉取模型
+# 2. 拉取模型（bge-m3 为 1024 维，与云端默认完全一致）
+docker exec ai-ollama ollama pull bge-m3
 docker exec ai-ollama ollama pull qwen2.5:7b
-docker exec ai-ollama ollama pull nomic-embed-text
 
-# 3. 使用 Ollama profile 启动应用（make 方式）
-make run-ollama
-
-# 或手动启动：
-set -a && source .env && set +a && \
-./mvnw spring-boot:run -pl spring-ai-template-app \
-  -Dspring-boot.run.profiles=dev,ollama
+# 3. 把嵌入端点指向它，照常启动应用
+#    应用在容器内时使用 http://ollama:11434/v1
+EMBEDDING_BASE_URL=http://localhost:11434/v1
+EMBEDDING_MODEL=bge-m3
+EMBEDDING_API_KEY=ollama        # Ollama 不校验，但必须非空
+./mvnw spring-boot:run -pl spring-ai-template-app
 ```
 
-> 切换 Embedding 提供方会改变向量维度（OpenAI 1536 维 vs Ollama 768 维）。切换时请使用干净的
-> `vector_store` 表（或按 provider 分表），否则写入会因维度不匹配而失败。
+vLLM、LocalAI、TEI 网关等任何提供 `/v1/embeddings` 的服务同理。
+
+> 保持 1024 维可以继续使用现有 `vector_store` 表；换成其他维度的模型则需要
+> `DROP TABLE vector_store`、重启（prod 的建表语句在 `sql/init.sql`）并通过复处理接口重新入库。
 
 ## API 接口
 
@@ -248,30 +259,28 @@ curl http://localhost:8080/api/knowledge/{id}/documents
 | `OPENAI_API_KEY` | - | **必填。** OpenAI API Key |
 | `OPENAI_BASE_URL` | api.openai.com | OpenAI 兼容接口地址 |
 | `OPENAI_CHAT_MODEL` | gpt-4o-mini | 对话模型名称 |
-| `OPENAI_EMBEDDING_MODEL` | text-embedding-3-small | 向量嵌入模型名称 |
-| `EMBEDDING_PROVIDER` | openai | 向量库 Embedding 来源：`openai` 或 `ollama`（prod） |
+| `EMBEDDING_BASE_URL` | api.siliconflow.cn/v1 | 嵌入端点（任何 OpenAI 兼容 `/v1`，云端或本地） |
+| `EMBEDDING_API_KEY` | - | **必填。** 嵌入端点的 Key |
+| `EMBEDDING_MODEL` | BAAI/bge-m3 | 嵌入模型（默认 1024 维） |
+| `EMBEDDING_DIMENSIONS` | 1024 | pgvector 列宽，必须与模型输出一致 |
+| `STORAGE_TYPE` | local | 原始文件存储方式（`local`；实现 `DocumentStorage` 可换 MinIO/S3） |
+| `STORAGE_ROOT` | ./data/documents | 本地存储目录（容器内为 `/app/data/documents`） |
 | `POSTGRES_PASSWORD` | postgres | PostgreSQL 密码 |
 | `REDIS_PASSWORD` | redis123 | Redis 密码 |
 | `RABBITMQ_USER` | admin | RabbitMQ 用户名 |
 | `RABBITMQ_PASSWORD` | admin123 | RabbitMQ 密码 |
-| `OLLAMA_CHAT_MODEL` | qwen2.5:7b | Ollama 对话模型（可选） |
-| `OLLAMA_EMBEDDING_MODEL` | nomic-embed-text | Ollama 向量嵌入模型（可选） |
+| `OLLAMA_CHAT_MODEL` | qwen2.5:7b | Ollama 对话模型（可选，本地实验） |
 
 ### Spring Profiles
 
 | Profile | 说明 |
 |---------|------|
-| `dev` | 开发环境（默认），使用 OpenAI |
+| `dev` | 开发环境（默认），对话/嵌入均走 OpenAI 兼容端点 |
 | `prod` | 生产环境，所有配置通过环境变量注入 |
-| `ollama` | 向量库 Embedding 切换到 Ollama 本地模型，需与 `dev` 或 `prod` 一起使用 |
 
 ```bash
-# 使用 OpenAI（默认）
+# 默认（dev）：对话与嵌入均取 .env 里的 OPENAI_* / EMBEDDING_*
 ./mvnw spring-boot:run -pl spring-ai-template-app
-
-# 使用 Ollama 本地模型
-./mvnw spring-boot:run -pl spring-ai-template-app \
-  -Dspring-boot.run.profiles=dev,ollama
 ```
 
 ## Docker 全量部署
@@ -283,6 +292,8 @@ docker build -t spring-ai-template:latest .
 # 启动所有服务（中间件 + 应用）
 docker compose -f docker/docker-compose.yml -f docker/docker-compose.app.yml --profile app up -d
 ```
+
+上传的原始文件写入命名卷 `app_documents`（挂载到 `/app/data/documents`），容器重建不会丢失。
 
 ## 常用命令
 

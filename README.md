@@ -76,10 +76,19 @@ spring-ai-template/
 
 Edit the `.env` file in the project root (not `docker/.env`, which is for Docker containers). The application imports it automatically through `spring.config.import`, so no shell export is needed (real environment variables still take precedence):
 
+```bash
+cp .env.example .env      # then fill in the two keys
+```
+
 ```env
-OPENAI_API_KEY=sk-your-key-here
+OPENAI_API_KEY=sk-your-key-here          # chat endpoint
 OPENAI_BASE_URL=https://api.openai.com
 OPENAI_CHAT_MODEL=gpt-4o-mini
+
+EMBEDDING_BASE_URL=https://api.siliconflow.cn/v1   # embedding endpoint
+EMBEDDING_API_KEY=sk-your-key-here
+EMBEDDING_MODEL=BAAI/bge-m3
+EMBEDDING_DIMENSIONS=1024
 ```
 
 Supported OpenAI-compatible providers:
@@ -148,33 +157,37 @@ $env:OPENAI_CHAT_MODEL = "gpt-4o-mini"
 - **RabbitMQ Console**: http://localhost:15672 (admin/admin123)
 - **MinIO Console**: http://localhost:9001 (minioadmin/minioadmin)
 
-## Optional: Ollama for Local Embeddings
+## Optional: Keep Chat / Embeddings On-Prem
 
-The `ollama` profile switches the **vector-store embedding source** to a local Ollama model
-(768-dim `nomic-embed-text`). Chat keeps using the OpenAI-compatible endpoint: `AiConfig` binds
-the primary `ChatClient` to `openAiChatModel`, while `spring.ai.model.embedding=ollama`
-(set by the profile) disables the OpenAI embedding bean so only one `EmbeddingModel` exists.
+Chat and embedding are two independent OpenAI-compatible clients, so going on-prem is a URL
+change - no profile, no code, no image rebuild:
+
+| What | Variables to change |
+|------|---------------------|
+| Chat | `OPENAI_BASE_URL` (+ `OPENAI_CHAT_MODEL`) |
+| Embedding | `EMBEDDING_BASE_URL` (+ `EMBEDDING_MODEL`, `EMBEDDING_DIMENSIONS`) |
 
 ```bash
-# 1. Start Ollama service
+# 1. Start the optional local Ollama container
 docker compose -f docker/docker-compose.yml --profile ollama up -d
 
-# 2. Pull models
+# 2. Pull models (bge-m3 is 1024-dim - same width as the cloud default)
+docker exec ai-ollama ollama pull bge-m3
 docker exec ai-ollama ollama pull qwen2.5:7b
-docker exec ai-ollama ollama pull nomic-embed-text
 
-# 3. Run with Ollama profile (using make)
-make run-ollama
-
-# Or manually:
-set -a && source .env && set +a && \
-./mvnw spring-boot:run -pl spring-ai-template-app \
-  -Dspring-boot.run.profiles=dev,ollama
+# 3. Point the embedding endpoint at it and run the app as usual
+#    (use http://ollama:11434/v1 when the app runs inside a container)
+EMBEDDING_BASE_URL=http://localhost:11434/v1
+EMBEDDING_MODEL=bge-m3
+EMBEDDING_API_KEY=ollama        # Ollama ignores the key, but it must be non-empty
+./mvnw spring-boot:run -pl spring-ai-template-app
 ```
 
-> Switching embedding providers changes the vector dimension (1536 for OpenAI vs 768 for Ollama).
-> Use a clean `vector_store` table (or one table per provider) when switching, otherwise inserts
-> will fail with a dimension mismatch.
+vLLM, LocalAI, TEI gateways and any other server exposing `/v1/embeddings` work the same way.
+
+> Staying on 1024 dimensions keeps the existing `vector_store` table usable. A model with a
+> different dimension requires `DROP TABLE vector_store`, a restart (prod DDL lives in
+> `sql/init.sql`) and re-ingesting every document through the reprocess endpoint.
 
 ## API Endpoints
 
@@ -232,14 +245,17 @@ curl http://localhost:8080/api/knowledge/{id}/documents
 | `OPENAI_API_KEY` | - | **Required.** OpenAI API key |
 | `OPENAI_BASE_URL` | api.openai.com | OpenAI-compatible base URL |
 | `OPENAI_CHAT_MODEL` | gpt-4o-mini | Chat model name |
-| `OPENAI_EMBEDDING_MODEL` | text-embedding-3-small | Embedding model name |
-| `EMBEDDING_PROVIDER` | openai | Embedding source for the vector store: `openai` or `ollama` (prod) |
+| `EMBEDDING_BASE_URL` | api.siliconflow.cn/v1 | Embedding endpoint (any OpenAI-compatible `/v1`, cloud or on-prem) |
+| `EMBEDDING_API_KEY` | - | **Required.** Key for the embedding endpoint |
+| `EMBEDDING_MODEL` | BAAI/bge-m3 | Embedding model (1024 dims by default) |
+| `EMBEDDING_DIMENSIONS` | 1024 | pgvector column width, must match the model |
+| `STORAGE_TYPE` | local | Raw file storage (`local`; implement `DocumentStorage` for MinIO/S3) |
+| `STORAGE_ROOT` | ./data/documents | Local storage root (`/app/data/documents` in the container) |
 | `POSTGRES_PASSWORD` | postgres | PostgreSQL password |
 | `REDIS_PASSWORD` | redis123 | Redis password |
 | `RABBITMQ_USER` | admin | RabbitMQ username |
 | `RABBITMQ_PASSWORD` | admin123 | RabbitMQ password |
-| `OLLAMA_CHAT_MODEL` | qwen2.5:7b | Ollama chat model (optional) |
-| `OLLAMA_EMBEDDING_MODEL` | nomic-embed-text | Ollama embedding model (optional) |
+| `OLLAMA_CHAT_MODEL` | qwen2.5:7b | Ollama chat model (optional, on-prem experiments) |
 
 ## Docker Full Deployment
 
@@ -250,6 +266,9 @@ docker build -t spring-ai-template:latest .
 # Run all services (middleware + app)
 docker compose -f docker/docker-compose.yml -f docker/docker-compose.app.yml --profile app up -d
 ```
+
+Uploaded documents are written to the named volume `app_documents` mounted at
+`/app/data/documents`, so they survive container recreation.
 
 ## Development
 

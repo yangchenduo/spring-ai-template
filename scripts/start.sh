@@ -39,11 +39,13 @@ docker compose up -d
 echo "Waiting for services to be healthy..."
 sleep 15
 
-# Step 4: Pull Ollama models
+# Step 4: Pull optional Ollama models
+# Only needed when you keep chat/embeddings on-prem; the cloud endpoints
+# configured in .env work without this step.
 echo ""
-echo "[4/5] Pulling Ollama models (this may take a few minutes)..."
+echo "[4/5] Pulling Ollama models (optional)..."
+docker exec ai-ollama ollama pull bge-m3 || echo "Warning: ai-ollama not running - embeddings stay on the cloud endpoint"
 docker exec ai-ollama ollama pull qwen2.5:7b || echo "Warning: Failed to pull qwen2.5:7b"
-docker exec ai-ollama ollama pull nomic-embed-text || echo "Warning: Failed to pull nomic-embed-text"
 
 # Step 5: Build and run
 echo ""

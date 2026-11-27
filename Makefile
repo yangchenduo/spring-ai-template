@@ -35,14 +35,9 @@ run: ## Run the application (loads .env, dev profile)
 	@set -a && source .env 2>/dev/null && set +a && \
 	$(MVN) spring-boot:run -pl spring-ai-template-app
 
-run-ollama: ## Run with Ollama profile (loads .env)
-	@set -a && source .env 2>/dev/null && set +a && \
-	$(MVN) spring-boot:run -pl spring-ai-template-app \
-		-Dspring-boot.run.profiles=dev,ollama
-
-ollama-pull: ## Pull default Ollama models
+ollama-pull: ## Pull local Ollama models (bge-m3 = 1024 dims, same as cloud)
+	docker exec ai-ollama ollama pull bge-m3
 	docker exec ai-ollama ollama pull qwen2.5:7b
-	docker exec ai-ollama ollama pull nomic-embed-text
 
 logs: ## Show middleware logs
 	$(COMPOSE) logs -f
