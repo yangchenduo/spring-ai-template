@@ -1,0 +1,24 @@
+# Keep the build context small and free of secrets.
+# The image only needs the packaged jar (see Dockerfile).
+.git
+.history
+.idea
+.vscode
+*.iml
+logs/
+data/
+.env
+.env.local
+docker/.env
+README.md
+README_CN.md
+doc/
+sql/
+scripts/
+Makefile
+
+# Build output: ignore everything except the runnable jar
+**/target/
+!spring-ai-template-app/target/
+spring-ai-template-app/target/*
+!spring-ai-template-app/target/*.jar
