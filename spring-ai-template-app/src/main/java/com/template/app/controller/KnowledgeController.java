@@ -59,4 +59,16 @@ public class KnowledgeController {
     public Result<List<KnowledgeDoc>> listDocuments(@PathVariable String id) {
         return Result.ok(knowledgeService.listDocuments(id));
     }
+
+    @Operation(summary = "Delete a document (also removes its embedded chunks and stored file)")
+    @DeleteMapping("/{id}/documents/{docId}")
+    public Result<KnowledgeDoc> deleteDocument(@PathVariable String id, @PathVariable String docId) {
+        return Result.ok(knowledgeService.deleteDocument(id, docId));
+    }
+
+    @Operation(summary = "Re-queue a document for processing (retry after failure)")
+    @PostMapping("/{id}/documents/{docId}/reprocess")
+    public Result<KnowledgeDoc> reprocessDocument(@PathVariable String id, @PathVariable String docId) {
+        return Result.ok(knowledgeService.reprocessDocument(id, docId));
+    }
 }

@@ -19,4 +19,21 @@ public interface KnowledgeService {
     KnowledgeDoc uploadDocument(String knowledgeId, MultipartFile file);
 
     List<KnowledgeDoc> listDocuments(String knowledgeId);
+
+    /**
+     * Deletes a document together with its embedded chunks and stored raw file.
+     */
+    KnowledgeDoc deleteDocument(String knowledgeId, String docId);
+
+    /**
+     * Re-queues a document for asynchronous processing (retry after failure or re-ingest).
+     */
+    KnowledgeDoc reprocessDocument(String knowledgeId, String docId);
+
+    /**
+     * Async pipeline: parse, chunk, embed and store a document.
+     * Called by the RabbitMQ consumer; throws on failure so the message
+     * is dead-lettered while the document row is marked failed.
+     */
+    void processDocument(String docId);
 }

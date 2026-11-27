@@ -14,6 +14,7 @@ import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.prompt.SystemPromptTemplate;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
@@ -32,6 +33,13 @@ public class ChatServiceImpl implements ChatService {
     private final ChatHistoryMapper chatHistoryMapper;
 
     private final Map<String, List<Message>> conversationStore = new ConcurrentHashMap<>();
+
+    /** Reported back to clients / history; the endpoint itself is spring.ai.openai.*. */
+    @Value("${app.ai.chat-provider:openai}")
+    private String chatProvider;
+
+    @Value("${spring.ai.openai.chat.options.model:}")
+    private String chatModel;
 
     private static final String SYSTEM_PROMPT = """
             You are a helpful AI assistant. Answer questions concisely and accurately.
@@ -65,16 +73,16 @@ public class ChatServiceImpl implements ChatService {
 
         history.add(new AssistantMessage(response));
 
-        saveHistory(conversationId, "user", request.getMessage(), "ollama", null);
-        saveHistory(conversationId, "assistant", response, "ollama", null);
+        saveHistory(conversationId, "user", request.getMessage(), chatProvider, chatModelOrNull());
+        saveHistory(conversationId, "assistant", response, chatProvider, chatModelOrNull());
 
         long elapsed = System.currentTimeMillis() - start;
 
         return ChatResponse.builder()
                 .conversationId(conversationId)
                 .message(response)
-                .provider("ollama")
-                .model(null)
+                .provider(chatProvider)
+                .model(chatModelOrNull())
                 .elapsed(elapsed)
                 .build();
     }
@@ -100,6 +108,10 @@ public class ChatServiceImpl implements ChatService {
                 .messages(messages)
                 .stream()
                 .content();
+    }
+
+    private String chatModelOrNull() {
+        return chatModel == null || chatModel.isBlank() ? null : chatModel;
     }
 
     private void saveHistory(String conversationId, String role, String content, String provider, String model) {

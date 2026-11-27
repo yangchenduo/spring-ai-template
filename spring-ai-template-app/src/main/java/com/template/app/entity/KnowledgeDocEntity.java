@@ -19,7 +19,7 @@ public class KnowledgeDocEntity {
     private Long fileSize;
     private String status;
     private Integer chunkCount;
-    private String minioPath;
+    private String storagePath;
     private String errorMsg;
     private LocalDateTime createdAt;
 }
